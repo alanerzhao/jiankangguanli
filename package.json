@@ -1,0 +1,10 @@
+{
+  "name": "health-manager-static",
+  "private": true,
+  "scripts": {
+    "check": "npm run check:syntax && npm run check:docs && npm run check:smoke",
+    "check:syntax": "node --check app.js && node --check config.js && node --check scripts/check-docs.mjs && node --check scripts/check-static-site.mjs",
+    "check:docs": "node scripts/check-docs.mjs",
+    "check:smoke": "node scripts/check-static-site.mjs"
+  }
+}

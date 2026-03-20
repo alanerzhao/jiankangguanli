@@ -50,3 +50,21 @@
 - `styles.css`: 界面样式
 - `app.js`: 数据存储与交互逻辑
 - `supabase-setup.sql`: Supabase 数据表和 RLS 初始化 SQL
+- `AGENTS.md`: 给 Codex / 智能体阅读的仓库地图
+- `docs/`: 产品、架构、验收和运维文档
+- `scripts/`: 零依赖检查脚本
+
+## Harness Engineering 实践
+
+这个仓库现在已经补上了一套轻量的 harness，目标是让智能体和人都能更稳定地改这个项目：
+
+- `AGENTS.md` 只做地图，避免变成又大又旧的说明书
+- `docs/` 把产品目标、架构边界、验收标准和运维流程分开记录
+- `npm run check` 会统一跑语法检查、文档完整性检查和静态站点冒烟检查
+- GitHub Actions 会在部署前先跑检查，避免明显回归直接上线
+
+本地执行：
+
+```bash
+npm run check
+```
