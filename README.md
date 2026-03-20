@@ -53,6 +53,7 @@
 - `AGENTS.md`: 给 Codex / 智能体阅读的仓库地图
 - `docs/`: 产品、架构、验收和运维文档
 - `scripts/`: 零依赖检查脚本
+- `docs/harness-engineering-practice.md`: 本项目的 harness engineering 实践记录
 
 ## Harness Engineering 实践
 

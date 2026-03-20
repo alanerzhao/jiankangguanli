@@ -14,6 +14,8 @@
   记录本地预览、云同步初始化、发布和回滚流程。
 - `tech-debt.md`
   跟踪还未解决但已知的重要缺口。
+- `harness-engineering-practice.md`
+  记录这次从回滚、补文档、接检查到加入 Playwright 的完整实践。
 
 ## 推荐阅读顺序
 
