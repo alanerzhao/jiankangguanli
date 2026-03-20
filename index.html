@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700&family=Outfit:wght@300;400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700&family=Outfit:wght@300;400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css" />
@@ -16,201 +16,91 @@
     <div class="page-shell">
       <header class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">Health Command Deck</p>
+          <p class="eyebrow">Personal Health Manager</p>
           <h1>健康掌舵台</h1>
           <p class="hero-text">
-            每天快速记录，按周、月、年复盘自己的节奏。系统会给你激励、提醒和下一步建议，让健康管理不只是记账，而是真的能坚持。
+            把饮水、睡眠、步数、饮食热量、体重和心情集中管理。支持周、月、年复盘，也预留了 Supabase 云同步能力。
           </p>
-          <div class="hero-badges">
-            <span id="storageModeLabel" class="hero-badge">仅本地</span>
-            <span id="authStatusLabel" class="hero-badge">未登录</span>
-            <span id="syncStatusLabel" class="hero-badge">尚未同步</span>
-          </div>
         </div>
-
         <div class="hero-card">
-          <div class="hero-score-block">
-            <div class="score-ring">
-              <div class="score-ring-inner">
-                <span class="score-ring-label">今日分数</span>
-                <strong id="todayHealthScore">0</strong>
-              </div>
-            </div>
-            <div class="hero-status-copy">
-              <p class="hero-card-label">今日状态</p>
-              <h2 id="heroStatusTitle">开始热身</h2>
-              <p id="heroStatusBody" class="hero-status-body">先记录今天的数据，系统会自动帮你分析当前状态。</p>
-            </div>
-          </div>
-
+          <p class="hero-card-label">今日完成度</p>
           <div class="hero-progress">
             <div id="dailyProgressBar"></div>
           </div>
           <p id="dailyProgressText" class="hero-progress-text">0 / 5 项达标</p>
-
           <div class="hero-highlights">
-            <article>
+            <div>
               <span>最近体重</span>
               <strong id="latestWeight">-</strong>
-            </article>
-            <article>
+            </div>
+            <div>
               <span>最近热量</span>
               <strong id="latestCalories">-</strong>
-            </article>
-            <article>
-              <span>连续记录</span>
-              <strong id="recordStreak">0 天</strong>
-            </article>
-            <article>
-              <span>连续达标</span>
-              <strong id="goalStreak">0 天</strong>
-            </article>
+            </div>
           </div>
-
-          <div class="hero-feedback">
-            <h3>今日鼓励</h3>
-            <p id="encouragementText">稳定记录本身就是进步，先把今天的数据留下来。</p>
+          <div class="sync-inline">
+            <div class="sync-pills">
+              <span id="storageModeLabel" class="sync-pill">仅本地</span>
+              <span id="authStatusLabel" class="sync-pill">未登录</span>
+              <span id="syncStatusLabel" class="sync-pill">尚未同步</span>
+            </div>
+            <p id="cloudMessage" class="sync-message"></p>
           </div>
-
-          <p id="cloudMessage" class="sync-message"></p>
         </div>
       </header>
 
       <main class="dashboard">
-        <section class="panel panel-overview">
-          <div class="panel-heading panel-heading-split">
-            <div>
-              <h2>今日聚焦</h2>
-              <p>一眼看清今天离目标还有多远</p>
-            </div>
-            <div class="mini-stats">
-              <article>
-                <span>稳定度</span>
-                <strong id="consistencyScore">-</strong>
-              </article>
-              <article>
-                <span>本月记录</span>
-                <strong id="monthCheckins">-</strong>
-              </article>
-            </div>
-          </div>
-
-          <div id="focusCards" class="focus-grid"></div>
-
-          <div class="advice-grid">
-            <article class="advice-card">
-              <span class="advice-eyebrow">今日建议</span>
-              <h3 id="nextActionTitle">先记录今天的数据</h3>
-              <p id="nextActionBody">系统会根据你的饮水、睡眠、热量和活动量给出下一步建议。</p>
-            </article>
-            <article class="advice-card">
-              <span class="advice-eyebrow">复盘亮点</span>
-              <h3 id="highlightTitle">还在形成习惯</h3>
-              <p id="highlightBody">连续记录几天后，这里会开始给出真正有参考价值的正向反馈。</p>
-            </article>
-          </div>
-        </section>
-
         <section class="panel panel-form">
           <div class="panel-heading">
-            <h2>快速记录</h2>
-            <p>先点快捷按钮，再补完整数据，录入会轻松很多</p>
+            <h2>每日打卡</h2>
+            <p>记录你今天的关键健康数据</p>
           </div>
-
-          <div class="quick-actions-grid">
-            <div class="quick-group">
-              <span>饮水</span>
-              <div class="quick-chip-row">
-                <button type="button" class="quick-chip" data-target="water" data-mode="add" data-value="250">+250ml</button>
-                <button type="button" class="quick-chip" data-target="water" data-mode="add" data-value="500">+500ml</button>
-                <button type="button" class="quick-chip" data-target="water" data-mode="set" data-value="2000">达标线</button>
-              </div>
-            </div>
-            <div class="quick-group">
-              <span>睡眠</span>
-              <div class="quick-chip-row">
-                <button type="button" class="quick-chip" data-target="sleep" data-mode="set" data-value="6.5">6.5h</button>
-                <button type="button" class="quick-chip" data-target="sleep" data-mode="set" data-value="7.5">7.5h</button>
-                <button type="button" class="quick-chip" data-target="sleep" data-mode="set" data-value="8">8h</button>
-              </div>
-            </div>
-            <div class="quick-group">
-              <span>步数</span>
-              <div class="quick-chip-row">
-                <button type="button" class="quick-chip" data-target="steps" data-mode="add" data-value="1000">+1000</button>
-                <button type="button" class="quick-chip" data-target="steps" data-mode="add" data-value="3000">+3000</button>
-                <button type="button" class="quick-chip" data-target="steps" data-mode="set" data-value="8000">达标线</button>
-              </div>
-            </div>
-            <div class="quick-group">
-              <span>热量</span>
-              <div class="quick-chip-row">
-                <button type="button" class="quick-chip" data-target="calories" data-mode="set" data-value="1400">1400</button>
-                <button type="button" class="quick-chip" data-target="calories" data-mode="set" data-value="1800">1800</button>
-                <button type="button" class="quick-chip" data-target="calories" data-mode="set" data-value="2200">2200</button>
-              </div>
-            </div>
-          </div>
-
           <form id="healthForm" class="health-form">
-            <div class="form-grid">
-              <label>
-                日期
-                <input type="date" id="recordDate" required />
-              </label>
-              <label>
-                饮水量（ml）
-                <input type="number" id="water" min="0" step="100" placeholder="例如 2000" />
-              </label>
-              <label>
-                睡眠时长（小时）
-                <input type="number" id="sleep" min="0" max="24" step="0.5" placeholder="例如 7.5" />
-              </label>
-              <label>
-                步数
-                <input type="number" id="steps" min="0" step="100" placeholder="例如 8000" />
-              </label>
-              <label>
-                饮食热量（kcal）
-                <input type="number" id="calories" min="0" step="10" placeholder="例如 1650" />
-              </label>
-              <label>
-                体重（kg）
-                <input type="number" id="weight" min="0" step="0.1" placeholder="例如 60.5" />
-              </label>
-              <label>
-                心情状态
-                <select id="mood">
-                  <option value="精力充沛">精力充沛</option>
-                  <option value="状态稳定">状态稳定</option>
-                  <option value="有点疲惫">有点疲惫</option>
-                  <option value="压力较大">压力较大</option>
-                </select>
-              </label>
-              <label class="notes-field">
-                备注
-                <textarea id="notes" rows="4" placeholder="例如：今天吃得偏多、晚饭后散步、午休不足"></textarea>
-              </label>
-            </div>
-
-            <div class="form-footer">
-              <div class="form-state">
-                <span id="formStateLabel">正在新增一条记录</span>
-                <p id="formFeedback" class="form-feedback">保存后会自动更新复盘、趋势和激励状态。</p>
-              </div>
-              <div class="form-actions">
-                <button id="saveRecordBtn" type="submit">保存今日记录</button>
-                <button id="cancelEditBtn" type="button" class="secondary-button is-hidden">取消编辑</button>
-                <button id="deleteEditingBtn" type="button" class="ghost-button is-hidden">删除这条</button>
-              </div>
-            </div>
+            <label>
+              日期
+              <input type="date" id="recordDate" required />
+            </label>
+            <label>
+              饮水量（ml）
+              <input type="number" id="water" min="0" step="100" placeholder="例如 2000" />
+            </label>
+            <label>
+              睡眠时长（小时）
+              <input type="number" id="sleep" min="0" max="24" step="0.5" placeholder="例如 7.5" />
+            </label>
+            <label>
+              步数
+              <input type="number" id="steps" min="0" step="100" placeholder="例如 8000" />
+            </label>
+            <label>
+              饮食热量（kcal）
+              <input type="number" id="calories" min="0" step="10" placeholder="例如 1650" />
+            </label>
+            <label>
+              体重（kg）
+              <input type="number" id="weight" min="0" step="0.1" placeholder="例如 60.5" />
+            </label>
+            <label>
+              心情状态
+              <select id="mood">
+                <option value="精力充沛">精力充沛</option>
+                <option value="状态稳定">状态稳定</option>
+                <option value="有点疲惫">有点疲惫</option>
+                <option value="压力较大">压力较大</option>
+              </select>
+            </label>
+            <label>
+              备注
+              <textarea id="notes" rows="4" placeholder="例如：今天吃得偏多、晚饭后散步、午休不足"></textarea>
+            </label>
+            <button type="submit">保存今日记录</button>
           </form>
         </section>
 
         <section class="panel panel-goals">
           <div class="panel-heading">
             <h2>目标设置</h2>
-            <p>给系统一条明确的达标线，它才能更好地判断状态</p>
+            <p>用自己的节奏管理达标线</p>
           </div>
           <form id="goalsForm" class="goals-form">
             <label>
@@ -237,11 +127,37 @@
           </form>
         </section>
 
+        <section class="panel panel-summary">
+          <div class="panel-heading">
+            <h2>一周摘要</h2>
+            <p>快速看看近期状态</p>
+          </div>
+          <div class="summary-grid">
+            <article>
+              <span>平均饮水</span>
+              <strong id="avgWater">-</strong>
+            </article>
+            <article>
+              <span>平均睡眠</span>
+              <strong id="avgSleep">-</strong>
+            </article>
+            <article>
+              <span>平均步数</span>
+              <strong id="avgSteps">-</strong>
+            </article>
+            <article>
+              <span>平均热量</span>
+              <strong id="avgCalories">-</strong>
+            </article>
+          </div>
+          <div id="insights" class="insights"></div>
+        </section>
+
         <section class="panel panel-review">
           <div class="panel-heading panel-heading-split">
             <div>
               <h2>复盘中心</h2>
-              <p>看趋势、看结论，也看下一个阶段最值得做什么</p>
+              <p>从周到年看自己的健康管理节奏</p>
             </div>
             <div class="period-controls">
               <button type="button" class="period-button is-active" data-period="7d">7 天</button>
@@ -250,7 +166,6 @@
               <button type="button" class="period-button" data-period="year">今年</button>
             </div>
           </div>
-
           <div class="review-grid">
             <article>
               <span>记录天数</span>
@@ -268,6 +183,8 @@
               <span>体重变化</span>
               <strong id="reviewWeightChange">-</strong>
             </article>
+          </div>
+          <div class="review-grid review-grid-year">
             <article>
               <span>本月记录天数</span>
               <strong id="monthRecordedDays">-</strong>
@@ -285,7 +202,6 @@
               <strong id="yearGoalHitRate">-</strong>
             </article>
           </div>
-
           <div id="reviewNotes" class="review-notes"></div>
         </section>
 
@@ -308,19 +224,17 @@
         </section>
 
         <section class="panel panel-records">
-          <div class="panel-heading panel-heading-split">
-            <div>
-              <h2>健康记录</h2>
-              <p>支持查看、编辑和删除单条记录</p>
-            </div>
-            <div class="records-toolbar">
-              <button id="exportBtn" type="button" class="secondary-button">导出数据</button>
-              <label class="import-label">
-                导入数据
-                <input id="importInput" type="file" accept="application/json" />
-              </label>
-              <button id="clearBtn" type="button" class="ghost-button">清空记录</button>
-            </div>
+          <div class="panel-heading">
+            <h2>健康记录</h2>
+            <p>最近 20 条记录</p>
+          </div>
+          <div class="records-toolbar">
+            <button id="exportBtn" type="button" class="secondary-button">导出数据</button>
+            <label class="import-label">
+              导入数据
+              <input id="importInput" type="file" accept="application/json" />
+            </label>
+            <button id="clearBtn" type="button" class="ghost-button">清空记录</button>
           </div>
           <div class="table-wrap">
             <table>
@@ -334,7 +248,6 @@
                   <th>体重</th>
                   <th>心情</th>
                   <th>备注</th>
-                  <th>操作</th>
                 </tr>
               </thead>
               <tbody id="recordsBody"></tbody>
