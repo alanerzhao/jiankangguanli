@@ -37,6 +37,12 @@ npm run check
 - 切换复盘周期和趋势指标时，图表和摘要会同步变化
 - 导出 JSON 后可还原同一份数据并成功导入
 
+如果 Playwright 失败，CI 必须保留足够的诊断产物，至少包括：
+
+- 失败截图
+- trace
+- HTML report
+
 发布前建议再手动检查：
 
 ```text

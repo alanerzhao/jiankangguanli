@@ -23,6 +23,13 @@ npm run check
 - 静态站点冒烟检查
 - Playwright 端到端测试
 
+如果 Playwright 在 CI 中失败，GitHub Actions 会自动上传：
+
+- `playwright-report/`
+- `test-results/`
+
+其中通常包含截图、trace、视频和 HTML report，可用于复现和定位问题。
+
 首次在本地运行 Playwright 前，需要先安装依赖和浏览器：
 
 ```bash
