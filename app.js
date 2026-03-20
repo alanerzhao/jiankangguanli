@@ -1,5 +1,7 @@
 const STORAGE_KEY = "health-manager-records";
 const GOALS_KEY = "health-manager-goals";
+const CLOUD_CONFIG_KEY = "health-manager-cloud-config";
+const SYNC_META_KEY = "health-manager-sync-meta";
 
 const defaultGoals = {
   water: 2000,
@@ -17,12 +19,24 @@ const chartMetrics = {
   weight: { label: "体重", unit: "kg", color: "#16605f" },
 };
 
+const periodConfigs = {
+  "7d": { label: "最近 7 天", days: 7 },
+  "30d": { label: "最近 30 天", days: 30 },
+  month: { label: "本月", type: "month" },
+  year: { label: "今年", type: "year" },
+};
+
 let activeMetric = "calories";
+let activePeriod = "7d";
+let supabaseClient = null;
+let cloudSession = null;
 
 const form = document.querySelector("#healthForm");
 const goalsForm = document.querySelector("#goalsForm");
+const cloudConfigForm = document.querySelector("#cloudConfigForm");
 const recordsBody = document.querySelector("#recordsBody");
 const insights = document.querySelector("#insights");
+const reviewNotes = document.querySelector("#reviewNotes");
 const template = document.querySelector("#insightTemplate");
 
 const recordDate = document.querySelector("#recordDate");
@@ -52,6 +66,28 @@ const chartSummary = document.querySelector("#chartSummary");
 const chartCaption = document.querySelector("#chartCaption");
 const trendChart = document.querySelector("#trendChart");
 const trendButtons = document.querySelectorAll(".trend-button");
+const periodButtons = document.querySelectorAll(".period-button");
+
+const reviewRecordedDays = document.querySelector("#reviewRecordedDays");
+const reviewGoalHitRate = document.querySelector("#reviewGoalHitRate");
+const reviewSleepAverage = document.querySelector("#reviewSleepAverage");
+const reviewWeightChange = document.querySelector("#reviewWeightChange");
+const monthRecordedDays = document.querySelector("#monthRecordedDays");
+const monthCaloriesAverage = document.querySelector("#monthCaloriesAverage");
+const yearRecordedDays = document.querySelector("#yearRecordedDays");
+const yearGoalHitRate = document.querySelector("#yearGoalHitRate");
+
+const supabaseUrlInput = document.querySelector("#supabaseUrl");
+const supabaseAnonKeyInput = document.querySelector("#supabaseAnonKey");
+const authEmailInput = document.querySelector("#authEmail");
+const storageMode = document.querySelector("#storageMode");
+const authStatus = document.querySelector("#authStatus");
+const syncStatus = document.querySelector("#syncStatus");
+const cloudMessage = document.querySelector("#cloudMessage");
+const sendMagicLinkBtn = document.querySelector("#sendMagicLinkBtn");
+const syncUpBtn = document.querySelector("#syncUpBtn");
+const syncDownBtn = document.querySelector("#syncDownBtn");
+const signOutBtn = document.querySelector("#signOutBtn");
 
 const exportBtn = document.querySelector("#exportBtn");
 const importInput = document.querySelector("#importInput");
@@ -74,8 +110,32 @@ function getRecords() {
   return readStorage(STORAGE_KEY, []);
 }
 
+function writeRecords(records) {
+  writeStorage(STORAGE_KEY, records);
+}
+
 function getGoals() {
   return { ...defaultGoals, ...readStorage(GOALS_KEY, {}) };
+}
+
+function writeGoals(goals) {
+  writeStorage(GOALS_KEY, goals);
+}
+
+function getCloudConfig() {
+  return readStorage(CLOUD_CONFIG_KEY, { url: "", anonKey: "", email: "" });
+}
+
+function writeCloudConfig(config) {
+  writeStorage(CLOUD_CONFIG_KEY, config);
+}
+
+function getSyncMeta() {
+  return readStorage(SYNC_META_KEY, { lastSyncedAt: "" });
+}
+
+function writeSyncMeta(meta) {
+  writeStorage(SYNC_META_KEY, meta);
 }
 
 function setToday() {
@@ -91,6 +151,13 @@ function fillGoalsForm() {
   goalWeight.value = goals.weight;
 }
 
+function fillCloudForm() {
+  const config = getCloudConfig();
+  supabaseUrlInput.value = config.url || "";
+  supabaseAnonKeyInput.value = config.anonKey || "";
+  authEmailInput.value = config.email || "";
+}
+
 function formatMetric(value, suffix = "") {
   return value || value === 0 ? `${value}${suffix}` : "-";
 }
@@ -103,11 +170,32 @@ function formatDateLabel(value) {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
+function formatDateTime(value) {
+  if (!value) {
+    return "尚未同步";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(
+    2,
+    "0"
+  )}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
 function createInsight(title, body) {
   const node = template.content.cloneNode(true);
   node.querySelector(".insight-title").textContent = title;
   node.querySelector(".insight-body").textContent = body;
   insights.appendChild(node);
+}
+
+function createReviewNote(title, body) {
+  const article = document.createElement("article");
+  article.className = "review-note";
+  article.innerHTML = `<h3>${title}</h3><p>${body}</p>`;
+  reviewNotes.appendChild(article);
 }
 
 function computeAverage(records, key) {
@@ -119,10 +207,71 @@ function computeAverage(records, key) {
   return total / values.length;
 }
 
+function safeNumber(value) {
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function compareRecordsAsc(a, b) {
+  return a.date.localeCompare(b.date);
+}
+
+function compareRecordsDesc(a, b) {
+  return b.date.localeCompare(a.date);
+}
+
+function getMonthBounds(baseDate = new Date()) {
+  return {
+    year: baseDate.getFullYear(),
+    month: baseDate.getMonth(),
+  };
+}
+
+function isSameMonth(dateString, bounds) {
+  const date = new Date(`${dateString}T00:00:00`);
+  return date.getFullYear() === bounds.year && date.getMonth() === bounds.month;
+}
+
+function isSameYear(dateString, year) {
+  const date = new Date(`${dateString}T00:00:00`);
+  return date.getFullYear() === year;
+}
+
+function getRecordsForPeriod(period) {
+  const records = getRecords().slice().sort(compareRecordsAsc);
+  if (!records.length) {
+    return [];
+  }
+
+  const today = new Date();
+  if (period === "month") {
+    const monthBounds = getMonthBounds(today);
+    return records.filter((record) => isSameMonth(record.date, monthBounds));
+  }
+
+  if (period === "year") {
+    return records.filter((record) => isSameYear(record.date, today.getFullYear()));
+  }
+
+  const days = periodConfigs[period].days;
+  const cutoff = new Date(today);
+  cutoff.setDate(cutoff.getDate() - (days - 1));
+  const cutoffString = cutoff.toISOString().slice(0, 10);
+  return records.filter((record) => record.date >= cutoffString);
+}
+
+function computeDayGoalHits(record, goals) {
+  return [
+    Number(record.water) >= Number(goals.water),
+    Number(record.sleep) >= Number(goals.sleep),
+    Number(record.steps) >= Number(goals.steps),
+    record.calories ? Number(record.calories) <= Number(goals.calories) : false,
+    record.weight ? Math.abs(Number(record.weight) - Number(goals.weight)) <= 1 : false,
+  ];
+}
+
 function renderRecords() {
-  const records = getRecords()
-    .slice()
-    .sort((a, b) => b.date.localeCompare(a.date));
+  const records = getRecords().slice().sort(compareRecordsDesc);
 
   recordsBody.innerHTML = "";
 
@@ -133,7 +282,7 @@ function renderRecords() {
     return;
   }
 
-  records.slice(0, 10).forEach((record) => {
+  records.slice(0, 20).forEach((record) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${record.date}</td>
@@ -167,10 +316,7 @@ function updateDailyProgress(progressItems) {
 }
 
 function renderSummary() {
-  const records = getRecords()
-    .slice()
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 7);
+  const records = getRecords().slice().sort(compareRecordsDesc).slice(0, 7);
   const goals = getGoals();
 
   avgWater.textContent = records.length ? `${Math.round(computeAverage(records, "water") || 0)} ml` : "-";
@@ -187,15 +333,7 @@ function renderSummary() {
   }
 
   const latest = records[0];
-  const progressItems = [
-    Number(latest.water) >= Number(goals.water),
-    Number(latest.sleep) >= Number(goals.sleep),
-    Number(latest.steps) >= Number(goals.steps),
-    latest.calories ? Number(latest.calories) <= Number(goals.calories) : false,
-    latest.weight ? Math.abs(Number(latest.weight) - Number(goals.weight)) <= 1 : false,
-  ];
-
-  updateDailyProgress(progressItems);
+  updateDailyProgress(computeDayGoalHits(latest, goals));
 
   const waterAvg = computeAverage(records, "water");
   if (waterAvg !== null) {
@@ -247,35 +385,119 @@ function renderSummary() {
   }
 }
 
-function getLastSevenDaysRecords() {
-  return getRecords()
-    .slice()
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(-7);
+function renderReview() {
+  const records = getRecords().slice().sort(compareRecordsAsc);
+  const periodRecords = getRecordsForPeriod(activePeriod);
+  const goals = getGoals();
+  const today = new Date();
+  const monthRecords = records.filter((record) => isSameMonth(record.date, getMonthBounds(today)));
+  const yearRecords = records.filter((record) => isSameYear(record.date, today.getFullYear()));
+
+  reviewNotes.innerHTML = "";
+
+  if (!periodRecords.length) {
+    reviewRecordedDays.textContent = "-";
+    reviewGoalHitRate.textContent = "-";
+    reviewSleepAverage.textContent = "-";
+    reviewWeightChange.textContent = "-";
+    monthRecordedDays.textContent = "-";
+    monthCaloriesAverage.textContent = "-";
+    yearRecordedDays.textContent = "-";
+    yearGoalHitRate.textContent = "-";
+    createReviewNote("还没有足够的数据", "继续按天记录，系统会逐步形成周、月、年的健康复盘。");
+    return;
+  }
+
+  const dayScores = periodRecords.map((record) => {
+    const hits = computeDayGoalHits(record, goals);
+    return hits.filter(Boolean).length / hits.length;
+  });
+  const hitRate = Math.round((dayScores.reduce((sum, value) => sum + value, 0) / dayScores.length) * 100);
+  const sleepAverage = computeAverage(periodRecords, "sleep");
+  const weightRecords = periodRecords.filter((record) => safeNumber(record.weight) !== null);
+  const firstWeight = weightRecords[0] ? Number(weightRecords[0].weight) : null;
+  const lastWeight = weightRecords[weightRecords.length - 1] ? Number(weightRecords[weightRecords.length - 1].weight) : null;
+  const weightDiff =
+    firstWeight !== null && lastWeight !== null ? Math.round((lastWeight - firstWeight) * 10) / 10 : null;
+
+  reviewRecordedDays.textContent = `${periodRecords.length} 天`;
+  reviewGoalHitRate.textContent = `${hitRate}%`;
+  reviewSleepAverage.textContent = sleepAverage !== null ? `${sleepAverage.toFixed(1)} h` : "-";
+  reviewWeightChange.textContent =
+    weightDiff === null ? "-" : `${weightDiff > 0 ? "+" : ""}${weightDiff.toFixed(1)} kg`;
+
+  monthRecordedDays.textContent = `${monthRecords.length} 天`;
+  monthCaloriesAverage.textContent = monthRecords.length
+    ? `${Math.round(computeAverage(monthRecords, "calories") || 0)} kcal`
+    : "-";
+  yearRecordedDays.textContent = `${yearRecords.length} 天`;
+  yearGoalHitRate.textContent = yearRecords.length
+    ? `${Math.round(
+        (yearRecords
+          .map((record) => computeDayGoalHits(record, goals).filter(Boolean).length / 5)
+          .reduce((sum, value) => sum + value, 0) /
+          yearRecords.length) *
+          100
+      )}%`
+    : "-";
+
+  const bestDay = periodRecords
+    .map((record) => ({ record, score: computeDayGoalHits(record, goals).filter(Boolean).length }))
+    .sort((a, b) => b.score - a.score)[0];
+
+  if (bestDay) {
+    createReviewNote("最佳状态日", `${bestDay.record.date} 达成了 ${bestDay.score}/5 项目标，是这一阶段节奏最稳的一天。`);
+  }
+
+  const caloriesAverage = computeAverage(periodRecords, "calories");
+  if (caloriesAverage !== null) {
+    createReviewNote(
+      "饮食控制",
+      caloriesAverage <= goals.calories
+        ? `这段时间平均热量控制在 ${Math.round(caloriesAverage)} kcal，整体比较稳。`
+        : `这段时间平均热量 ${Math.round(caloriesAverage)} kcal，高于目标，适合继续观察晚餐和零食。`
+    );
+  }
+
+  if (weightDiff !== null) {
+    createReviewNote(
+      "体重变化",
+      weightDiff === 0
+        ? "体重整体保持平稳。"
+        : weightDiff > 0
+        ? `体重较期初增加了 ${weightDiff.toFixed(1)} kg，可以结合热量和活动量一起看。`
+        : `体重较期初下降了 ${Math.abs(weightDiff).toFixed(1)} kg，说明近期控制有一定效果。`
+    );
+  }
 }
 
 function renderTrendChart() {
-  const records = getLastSevenDaysRecords();
+  const records = getRecordsForPeriod(activePeriod);
+  const goals = getGoals();
   const metricConfig = chartMetrics[activeMetric];
+  const goalValue = safeNumber(goals[activeMetric]);
 
   trendButtons.forEach((button) => {
-    const isActive = button.dataset.metric === activeMetric;
-    button.classList.toggle("is-active", isActive);
+    button.classList.toggle("is-active", button.dataset.metric === activeMetric);
+  });
+
+  periodButtons.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.period === activePeriod);
   });
 
   if (!records.length) {
-    chartSummary.textContent = `${metricConfig.label}趋势`;
-    chartCaption.textContent = "记录 7 天后，这里会展示你的走势变化。";
+    chartSummary.textContent = `${periodConfigs[activePeriod].label}${metricConfig.label}`;
+    chartCaption.textContent = "继续记录后，这里会展示你的走势变化。";
     trendChart.innerHTML = '<div class="chart-empty">还没有足够的数据来绘制趋势图。</div>';
     return;
   }
 
   const values = records.map((record) => Number(record[activeMetric]) || 0);
-  const maxValue = Math.max(...values, 1);
-  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values, goalValue || 0, 1);
+  const minValue = Math.min(...values, goalValue || maxValue);
   const range = Math.max(maxValue - minValue, maxValue * 0.25, 1);
-  const width = 640;
-  const height = 260;
+  const width = 720;
+  const height = 300;
   const paddingX = 42;
   const paddingY = 24;
   const chartWidth = width - paddingX * 2;
@@ -292,7 +514,7 @@ function renderTrendChart() {
   const average = Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10;
   const latestValue = values[values.length - 1];
 
-  chartSummary.textContent = `最近 7 天${metricConfig.label}`;
+  chartSummary.textContent = `${periodConfigs[activePeriod].label}${metricConfig.label}`;
   chartCaption.textContent = `最新 ${formatMetric(latestValue, ` ${metricConfig.unit}`)}，平均 ${average} ${metricConfig.unit}`;
 
   const gridLines = [0, 0.25, 0.5, 0.75, 1]
@@ -315,7 +537,9 @@ function renderTrendChart() {
     )
     .join("");
 
+  const labelStep = values.length > 16 ? 2 : 1;
   const valueBadges = points
+    .filter((_, index) => index % labelStep === 0 || index === values.length - 1)
     .map(
       (point) => `
         <text x="${point.x}" y="${Math.max(point.y - 12, 18)}" text-anchor="middle" class="chart-value-label">${point.value}</text>
@@ -323,9 +547,21 @@ function renderTrendChart() {
     )
     .join("");
 
+  const goalLine =
+    goalValue && goalValue > 0
+      ? (() => {
+          const goalY = height - paddingY - ((goalValue - minValue) / range) * chartHeight;
+          return `
+            <line x1="${paddingX}" y1="${goalY}" x2="${width - paddingX}" y2="${goalY}" class="chart-goal-line" />
+            <text x="${width - paddingX}" y="${Math.max(goalY - 8, 16)}" text-anchor="end" class="chart-goal-label">目标 ${goalValue}</text>
+          `;
+        })()
+      : "";
+
   trendChart.innerHTML = `
-    <svg viewBox="0 0 ${width} ${height}" class="chart-svg" role="img" aria-label="${metricConfig.label}近 7 日趋势图">
+    <svg viewBox="0 0 ${width} ${height}" class="chart-svg" role="img" aria-label="${metricConfig.label}${periodConfigs[activePeriod].label}趋势图">
       ${gridLines}
+      ${goalLine}
       <polyline points="${polyline}" class="chart-line" style="stroke:${metricConfig.color}"></polyline>
       ${labels}
       ${valueBadges}
@@ -333,11 +569,187 @@ function renderTrendChart() {
   `;
 }
 
+function updateCloudStatus() {
+  const config = getCloudConfig();
+  const syncMeta = getSyncMeta();
+  const hasConfig = Boolean(config.url && config.anonKey);
+  storageMode.textContent = hasConfig ? "本地 + 云端" : "仅本地";
+  authStatus.textContent = cloudSession?.user?.email || "未登录";
+  syncStatus.textContent = formatDateTime(syncMeta.lastSyncedAt);
+}
+
+function showCloudMessage(message) {
+  cloudMessage.textContent = message;
+}
+
+function createSupabaseClient() {
+  const config = getCloudConfig();
+  if (!config.url || !config.anonKey || !window.supabase?.createClient) {
+    supabaseClient = null;
+    return null;
+  }
+
+  supabaseClient = window.supabase.createClient(config.url, config.anonKey);
+  return supabaseClient;
+}
+
+async function restoreCloudSession() {
+  const client = supabaseClient || createSupabaseClient();
+  if (!client) {
+    cloudSession = null;
+    updateCloudStatus();
+    return;
+  }
+
+  const { data, error } = await client.auth.getSession();
+  cloudSession = error ? null : data.session;
+  updateCloudStatus();
+
+  client.auth.onAuthStateChange((_event, session) => {
+    cloudSession = session;
+    updateCloudStatus();
+  });
+}
+
+function normalizeCloudRecords(records, userId) {
+  return records.map((record) => ({
+    user_id: userId,
+    record_date: record.date,
+    water: safeNumber(record.water),
+    sleep: safeNumber(record.sleep),
+    steps: safeNumber(record.steps),
+    calories: safeNumber(record.calories),
+    weight: safeNumber(record.weight),
+    mood: record.mood || null,
+    notes: record.notes || null,
+  }));
+}
+
+async function syncLocalToCloud() {
+  const client = supabaseClient || createSupabaseClient();
+  if (!client) {
+    showCloudMessage("请先保存 Supabase 配置。");
+    return;
+  }
+
+  if (!cloudSession?.user) {
+    showCloudMessage("请先通过 Magic Link 登录云端账户。");
+    return;
+  }
+
+  const recordsPayload = normalizeCloudRecords(getRecords(), cloudSession.user.id);
+  const goalsPayload = { user_id: cloudSession.user.id, ...getGoals() };
+
+  const recordsResult = await client.from("health_records").upsert(recordsPayload, {
+    onConflict: "user_id,record_date",
+  });
+  if (recordsResult.error) {
+    showCloudMessage(`上传记录失败：${recordsResult.error.message}`);
+    return;
+  }
+
+  const goalsResult = await client.from("health_goals").upsert(goalsPayload, {
+    onConflict: "user_id",
+  });
+  if (goalsResult.error) {
+    showCloudMessage(`上传目标失败：${goalsResult.error.message}`);
+    return;
+  }
+
+  writeSyncMeta({ lastSyncedAt: new Date().toISOString() });
+  updateCloudStatus();
+  showCloudMessage("本地数据已上传到 Supabase。");
+}
+
+async function syncCloudToLocal() {
+  const client = supabaseClient || createSupabaseClient();
+  if (!client) {
+    showCloudMessage("请先保存 Supabase 配置。");
+    return;
+  }
+
+  if (!cloudSession?.user) {
+    showCloudMessage("请先通过 Magic Link 登录云端账户。");
+    return;
+  }
+
+  const [{ data: recordsData, error: recordsError }, { data: goalsData, error: goalsError }] = await Promise.all([
+    client
+      .from("health_records")
+      .select("record_date, water, sleep, steps, calories, weight, mood, notes")
+      .eq("user_id", cloudSession.user.id)
+      .order("record_date", { ascending: true }),
+    client.from("health_goals").select("water, sleep, steps, calories, weight").eq("user_id", cloudSession.user.id).single(),
+  ]);
+
+  if (recordsError) {
+    showCloudMessage(`拉取记录失败：${recordsError.message}`);
+    return;
+  }
+
+  if (goalsError && goalsError.code !== "PGRST116") {
+    showCloudMessage(`拉取目标失败：${goalsError.message}`);
+    return;
+  }
+
+  const normalizedRecords = (recordsData || []).map((record) => ({
+    date: record.record_date,
+    water: record.water,
+    sleep: record.sleep,
+    steps: record.steps,
+    calories: record.calories,
+    weight: record.weight,
+    mood: record.mood,
+    notes: record.notes || "",
+  }));
+
+  writeRecords(normalizedRecords);
+  if (goalsData) {
+    writeGoals({
+      water: goalsData.water,
+      sleep: goalsData.sleep,
+      steps: goalsData.steps,
+      calories: goalsData.calories,
+      weight: goalsData.weight,
+    });
+  }
+
+  writeSyncMeta({ lastSyncedAt: new Date().toISOString() });
+  renderAll();
+  updateCloudStatus();
+  showCloudMessage("云端数据已同步到当前浏览器。");
+}
+
+async function maybeAutoSyncRecord(record) {
+  const client = supabaseClient || createSupabaseClient();
+  if (!client || !cloudSession?.user) {
+    return;
+  }
+
+  await client.from("health_records").upsert(normalizeCloudRecords([record], cloudSession.user.id), {
+    onConflict: "user_id,record_date",
+  });
+
+  writeSyncMeta({ lastSyncedAt: new Date().toISOString() });
+  updateCloudStatus();
+}
+
+async function maybeAutoSyncGoals(goals) {
+  const client = supabaseClient || createSupabaseClient();
+  if (!client || !cloudSession?.user) {
+    return;
+  }
+
+  await client.from("health_goals").upsert({ user_id: cloudSession.user.id, ...goals }, { onConflict: "user_id" });
+  writeSyncMeta({ lastSyncedAt: new Date().toISOString() });
+  updateCloudStatus();
+}
+
 function upsertRecord(newRecord) {
   const records = getRecords();
   const nextRecords = records.filter((record) => record.date !== newRecord.date);
   nextRecords.push(newRecord);
-  writeStorage(STORAGE_KEY, nextRecords);
+  writeRecords(nextRecords);
 }
 
 function resetFormForNextEntry() {
@@ -352,12 +764,15 @@ function resetFormForNextEntry() {
 
 function renderAll() {
   fillGoalsForm();
+  fillCloudForm();
   renderRecords();
   renderSummary();
+  renderReview();
   renderTrendChart();
+  updateCloudStatus();
 }
 
-form.addEventListener("submit", (event) => {
+form.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   const record = {
@@ -372,12 +787,13 @@ form.addEventListener("submit", (event) => {
   };
 
   upsertRecord(record);
+  await maybeAutoSyncRecord(record);
   renderAll();
   resetFormForNextEntry();
   setToday();
 });
 
-goalsForm.addEventListener("submit", (event) => {
+goalsForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const nextGoals = {
     water: Number(goalWater.value) || defaultGoals.water,
@@ -386,8 +802,76 @@ goalsForm.addEventListener("submit", (event) => {
     calories: Number(goalCalories.value) || defaultGoals.calories,
     weight: Number(goalWeight.value) || defaultGoals.weight,
   };
-  writeStorage(GOALS_KEY, nextGoals);
+  writeGoals(nextGoals);
+  await maybeAutoSyncGoals(nextGoals);
   renderAll();
+});
+
+cloudConfigForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  writeCloudConfig({
+    url: supabaseUrlInput.value.trim(),
+    anonKey: supabaseAnonKeyInput.value.trim(),
+    email: authEmailInput.value.trim(),
+  });
+  createSupabaseClient();
+  await restoreCloudSession();
+  renderAll();
+  showCloudMessage("云配置已保存。接下来可以发送 Magic Link 登录。");
+});
+
+sendMagicLinkBtn.addEventListener("click", async () => {
+  const client = supabaseClient || createSupabaseClient();
+  const email = authEmailInput.value.trim();
+
+  if (!client || !email) {
+    showCloudMessage("请先填写并保存 Supabase 配置和登录邮箱。");
+    return;
+  }
+
+  const redirectTo = `${window.location.origin}${window.location.pathname}`;
+  const { error } = await client.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo: redirectTo,
+    },
+  });
+
+  if (error) {
+    showCloudMessage(`发送登录链接失败：${error.message}`);
+    return;
+  }
+
+  showCloudMessage("Magic Link 已发送，请去邮箱中点击登录链接后回到当前页面。");
+});
+
+syncUpBtn.addEventListener("click", async () => {
+  await syncLocalToCloud();
+});
+
+syncDownBtn.addEventListener("click", async () => {
+  await syncCloudToLocal();
+});
+
+signOutBtn.addEventListener("click", async () => {
+  const client = supabaseClient || createSupabaseClient();
+  if (!client) {
+    showCloudMessage("当前还没有启用云同步。");
+    return;
+  }
+
+  await client.auth.signOut();
+  cloudSession = null;
+  updateCloudStatus();
+  showCloudMessage("已退出云端账户。");
+});
+
+periodButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    activePeriod = button.dataset.period;
+    renderReview();
+    renderTrendChart();
+  });
 });
 
 trendButtons.forEach((button) => {
@@ -401,6 +885,10 @@ exportBtn.addEventListener("click", () => {
   const payload = {
     goals: getGoals(),
     records: getRecords(),
+    cloud: {
+      configured: Boolean(getCloudConfig().url && getCloudConfig().anonKey),
+      lastSyncedAt: getSyncMeta().lastSyncedAt || null,
+    },
     exportedAt: new Date().toISOString(),
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -424,17 +912,18 @@ importInput.addEventListener("change", async (event) => {
     if (!Array.isArray(parsed.records) || !parsed.goals || typeof parsed.goals !== "object") {
       throw new Error("invalid-data");
     }
-    writeStorage(STORAGE_KEY, parsed.records);
-    writeStorage(GOALS_KEY, parsed.goals);
+    writeRecords(parsed.records);
+    writeGoals(parsed.goals);
     renderAll();
     importInput.value = "";
+    showCloudMessage("本地导入成功。");
   } catch {
     alert("导入失败，请确认 JSON 文件格式正确。");
   }
 });
 
 clearBtn.addEventListener("click", () => {
-  const confirmed = window.confirm("确定要清空全部健康记录和目标吗？");
+  const confirmed = window.confirm("确定要清空当前浏览器中的全部健康记录和目标吗？这不会自动删除 Supabase 云端数据。");
   if (!confirmed) {
     return;
   }
@@ -444,8 +933,12 @@ clearBtn.addEventListener("click", () => {
   resetFormForNextEntry();
   renderAll();
   setToday();
+  showCloudMessage("当前浏览器里的本地数据已清空。");
 });
 
 setToday();
 fillGoalsForm();
+fillCloudForm();
+createSupabaseClient();
+restoreCloudSession();
 renderAll();

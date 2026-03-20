@@ -7,6 +7,7 @@
   --line: rgba(23, 35, 33, 0.12);
   --primary: #16605f;
   --secondary: #c56d2d;
+  --danger: #a14426;
   --shadow: 0 18px 40px rgba(46, 52, 45, 0.12);
 }
 
@@ -92,7 +93,10 @@ td,
 th,
 .hero-progress-text,
 .insight-body,
-.chart-caption {
+.chart-caption,
+.review-notes p,
+.setup-callout,
+.cloud-message {
   color: var(--muted);
 }
 
@@ -113,7 +117,6 @@ th,
 .hero-card-label {
   margin: 0 0 16px;
   font-size: 0.96rem;
-  color: var(--muted);
 }
 
 .hero-progress {
@@ -131,28 +134,42 @@ th,
   transition: width 220ms ease;
 }
 
-.hero-highlights {
+.hero-highlights,
+.summary-grid,
+.review-grid,
+.cloud-status {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.hero-highlights {
   margin-top: 24px;
 }
 
 .hero-highlights div,
 .summary-grid article,
+.review-grid article,
 .insight-item,
-.trend-button {
+.trend-button,
+.period-button,
+.cloud-status article {
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.72);
   border: 1px solid var(--line);
 }
 
-.hero-highlights div {
+.hero-highlights div,
+.summary-grid article,
+.review-grid article,
+.cloud-status article {
   padding: 16px;
 }
 
 .hero-highlights span,
 .summary-grid span,
+.review-grid span,
+.cloud-status span,
 .insight-title {
   display: block;
   color: var(--muted);
@@ -161,8 +178,10 @@ th,
 }
 
 .hero-highlights strong,
-.summary-grid strong {
-  font-size: 1.3rem;
+.summary-grid strong,
+.review-grid strong,
+.cloud-status strong {
+  font-size: 1.28rem;
 }
 
 .dashboard {
@@ -200,12 +219,15 @@ th,
 }
 
 .panel-records,
-.panel-trend {
+.panel-trend,
+.panel-review,
+.panel-cloud {
   grid-column: 1 / -1;
 }
 
 .health-form,
-.goals-form {
+.goals-form,
+.cloud-form {
   display: grid;
   gap: 16px;
 }
@@ -265,24 +287,15 @@ button[type="submit"] {
 .secondary-button,
 .ghost-button,
 .import-label,
-.trend-button {
+.trend-button,
+.period-button {
   background: white;
   color: var(--ink);
   border: 1px solid var(--line);
 }
 
 .ghost-button {
-  color: #a14426;
-}
-
-.summary-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.summary-grid article {
-  padding: 18px;
+  color: var(--danger);
 }
 
 .insights {
@@ -300,13 +313,15 @@ button[type="submit"] {
   line-height: 1.6;
 }
 
-.trend-controls {
+.period-controls,
+.trend-controls,
+.cloud-actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
-  margin-bottom: 18px;
 }
 
+.period-button,
 .trend-button {
   min-height: auto;
   padding: 10px 16px;
@@ -314,10 +329,41 @@ button[type="submit"] {
   box-shadow: none;
 }
 
+.period-button.is-active,
 .trend-button.is-active {
   background: linear-gradient(135deg, var(--primary), #0e4a49);
   color: white;
   border-color: transparent;
+}
+
+.review-grid + .review-grid,
+.review-notes,
+.cloud-form,
+.setup-callout,
+.cloud-message {
+  margin-top: 16px;
+}
+
+.review-notes {
+  display: grid;
+  gap: 12px;
+}
+
+.review-note {
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.review-note h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.review-note p {
+  margin: 0;
+  line-height: 1.6;
 }
 
 .trend-chart {
@@ -343,8 +389,15 @@ button[type="submit"] {
   stroke-linejoin: round;
 }
 
+.chart-goal-line {
+  stroke: rgba(197, 109, 45, 0.7);
+  stroke-width: 2;
+  stroke-dasharray: 8 6;
+}
+
 .chart-axis-label,
-.chart-value-label {
+.chart-value-label,
+.chart-goal-label {
   fill: var(--muted);
   font-size: 12px;
 }
@@ -362,6 +415,27 @@ button[type="submit"] {
   border: 1px dashed var(--line);
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.55);
+}
+
+.setup-callout {
+  padding: 14px 16px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px dashed var(--line);
+}
+
+.setup-callout p {
+  margin: 0 0 8px;
+}
+
+.text-link {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.text-link:hover {
+  text-decoration: underline;
 }
 
 .records-toolbar {
@@ -433,7 +507,9 @@ tbody tr:last-child td {
 
   .panel-form,
   .panel-records,
-  .panel-trend {
+  .panel-trend,
+  .panel-review,
+  .panel-cloud {
     grid-row: auto;
     grid-column: auto;
   }
@@ -452,8 +528,10 @@ tbody tr:last-child td {
     border-radius: 22px;
   }
 
+  .hero-highlights,
   .summary-grid,
-  .hero-highlights {
+  .review-grid,
+  .cloud-status {
     grid-template-columns: 1fr;
   }
 
@@ -461,15 +539,18 @@ tbody tr:last-child td {
     flex-direction: column;
   }
 
-  .trend-controls {
+  .period-controls,
+  .trend-controls,
+  .cloud-actions {
     gap: 8px;
   }
 
-  .trend-button {
+  .trend-button,
+  .period-button {
     padding: 10px 14px;
   }
 
   table {
-    min-width: 760px;
+    min-width: 860px;
   }
 }
