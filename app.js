@@ -1,7 +1,7 @@
 const STORAGE_KEY = "health-manager-records";
 const GOALS_KEY = "health-manager-goals";
-const CLOUD_CONFIG_KEY = "health-manager-cloud-config";
 const SYNC_META_KEY = "health-manager-sync-meta";
+const MAGIC_LINK_META_KEY = "health-manager-magic-link-meta";
 
 const defaultGoals = {
   water: 2000,
@@ -33,7 +33,6 @@ let cloudSession = null;
 
 const form = document.querySelector("#healthForm");
 const goalsForm = document.querySelector("#goalsForm");
-const cloudConfigForm = document.querySelector("#cloudConfigForm");
 const recordsBody = document.querySelector("#recordsBody");
 const insights = document.querySelector("#insights");
 const reviewNotes = document.querySelector("#reviewNotes");
@@ -77,17 +76,10 @@ const monthCaloriesAverage = document.querySelector("#monthCaloriesAverage");
 const yearRecordedDays = document.querySelector("#yearRecordedDays");
 const yearGoalHitRate = document.querySelector("#yearGoalHitRate");
 
-const supabaseUrlInput = document.querySelector("#supabaseUrl");
-const supabaseAnonKeyInput = document.querySelector("#supabaseAnonKey");
-const authEmailInput = document.querySelector("#authEmail");
-const storageMode = document.querySelector("#storageMode");
-const authStatus = document.querySelector("#authStatus");
-const syncStatus = document.querySelector("#syncStatus");
+const storageModeLabel = document.querySelector("#storageModeLabel");
+const authStatusLabel = document.querySelector("#authStatusLabel");
+const syncStatusLabel = document.querySelector("#syncStatusLabel");
 const cloudMessage = document.querySelector("#cloudMessage");
-const sendMagicLinkBtn = document.querySelector("#sendMagicLinkBtn");
-const syncUpBtn = document.querySelector("#syncUpBtn");
-const syncDownBtn = document.querySelector("#syncDownBtn");
-const signOutBtn = document.querySelector("#signOutBtn");
 
 const exportBtn = document.querySelector("#exportBtn");
 const importInput = document.querySelector("#importInput");
@@ -123,11 +115,12 @@ function writeGoals(goals) {
 }
 
 function getCloudConfig() {
-  return readStorage(CLOUD_CONFIG_KEY, { url: "", anonKey: "", email: "" });
-}
-
-function writeCloudConfig(config) {
-  writeStorage(CLOUD_CONFIG_KEY, config);
+  const runtime = window.HEALTH_APP_CONFIG || {};
+  return {
+    url: runtime.supabaseUrl || "",
+    anonKey: runtime.supabaseAnonKey || "",
+    email: runtime.supabaseAuthEmail || "",
+  };
 }
 
 function getSyncMeta() {
@@ -136,6 +129,14 @@ function getSyncMeta() {
 
 function writeSyncMeta(meta) {
   writeStorage(SYNC_META_KEY, meta);
+}
+
+function getMagicLinkMeta() {
+  return readStorage(MAGIC_LINK_META_KEY, { requestedAt: "" });
+}
+
+function writeMagicLinkMeta(meta) {
+  writeStorage(MAGIC_LINK_META_KEY, meta);
 }
 
 function setToday() {
@@ -149,13 +150,6 @@ function fillGoalsForm() {
   goalSteps.value = goals.steps;
   goalCalories.value = goals.calories;
   goalWeight.value = goals.weight;
-}
-
-function fillCloudForm() {
-  const config = getCloudConfig();
-  supabaseUrlInput.value = config.url || "";
-  supabaseAnonKeyInput.value = config.anonKey || "";
-  authEmailInput.value = config.email || "";
 }
 
 function formatMetric(value, suffix = "") {
@@ -572,10 +566,10 @@ function renderTrendChart() {
 function updateCloudStatus() {
   const config = getCloudConfig();
   const syncMeta = getSyncMeta();
-  const hasConfig = Boolean(config.url && config.anonKey);
-  storageMode.textContent = hasConfig ? "本地 + 云端" : "仅本地";
-  authStatus.textContent = cloudSession?.user?.email || "未登录";
-  syncStatus.textContent = formatDateTime(syncMeta.lastSyncedAt);
+  const configured = Boolean(config.url && config.anonKey);
+  storageModeLabel.textContent = configured ? "本地 + 云端" : "仅本地";
+  authStatusLabel.textContent = cloudSession?.user?.email || "未登录";
+  syncStatusLabel.textContent = formatDateTime(syncMeta.lastSyncedAt);
 }
 
 function showCloudMessage(message) {
@@ -604,10 +598,20 @@ async function restoreCloudSession() {
   const { data, error } = await client.auth.getSession();
   cloudSession = error ? null : data.session;
   updateCloudStatus();
+  if (cloudSession?.user) {
+    writeMagicLinkMeta({ requestedAt: "" });
+    await syncCloudToLocal(true);
+  } else {
+    await maybeRequestMagicLink();
+  }
 
-  client.auth.onAuthStateChange((_event, session) => {
+  client.auth.onAuthStateChange(async (_event, session) => {
     cloudSession = session;
     updateCloudStatus();
+    if (cloudSession?.user) {
+      writeMagicLinkMeta({ requestedAt: "" });
+      await syncCloudToLocal(true);
+    }
   });
 }
 
@@ -625,15 +629,19 @@ function normalizeCloudRecords(records, userId) {
   }));
 }
 
-async function syncLocalToCloud() {
+async function syncLocalToCloud(silent = false) {
   const client = supabaseClient || createSupabaseClient();
   if (!client) {
-    showCloudMessage("请先保存 Supabase 配置。");
+    if (!silent) {
+      showCloudMessage("请先在 config.js 中填写 Supabase 配置。");
+    }
     return;
   }
 
   if (!cloudSession?.user) {
-    showCloudMessage("请先通过 Magic Link 登录云端账户。");
+    if (!silent) {
+      showCloudMessage("正在等待云端身份完成绑定。");
+    }
     return;
   }
 
@@ -644,7 +652,9 @@ async function syncLocalToCloud() {
     onConflict: "user_id,record_date",
   });
   if (recordsResult.error) {
-    showCloudMessage(`上传记录失败：${recordsResult.error.message}`);
+    if (!silent) {
+      showCloudMessage(`上传记录失败：${recordsResult.error.message}`);
+    }
     return;
   }
 
@@ -652,24 +662,32 @@ async function syncLocalToCloud() {
     onConflict: "user_id",
   });
   if (goalsResult.error) {
-    showCloudMessage(`上传目标失败：${goalsResult.error.message}`);
+    if (!silent) {
+      showCloudMessage(`上传目标失败：${goalsResult.error.message}`);
+    }
     return;
   }
 
   writeSyncMeta({ lastSyncedAt: new Date().toISOString() });
   updateCloudStatus();
-  showCloudMessage("本地数据已上传到 Supabase。");
+  if (!silent) {
+    showCloudMessage("数据已自动保存到云端。");
+  }
 }
 
-async function syncCloudToLocal() {
+async function syncCloudToLocal(silent = false) {
   const client = supabaseClient || createSupabaseClient();
   if (!client) {
-    showCloudMessage("请先保存 Supabase 配置。");
+    if (!silent) {
+      showCloudMessage("请先在 config.js 中填写 Supabase 配置。");
+    }
     return;
   }
 
   if (!cloudSession?.user) {
-    showCloudMessage("请先通过 Magic Link 登录云端账户。");
+    if (!silent) {
+      showCloudMessage("正在等待云端身份完成绑定。");
+    }
     return;
   }
 
@@ -683,12 +701,16 @@ async function syncCloudToLocal() {
   ]);
 
   if (recordsError) {
-    showCloudMessage(`拉取记录失败：${recordsError.message}`);
+    if (!silent) {
+      showCloudMessage(`拉取记录失败：${recordsError.message}`);
+    }
     return;
   }
 
   if (goalsError && goalsError.code !== "PGRST116") {
-    showCloudMessage(`拉取目标失败：${goalsError.message}`);
+    if (!silent) {
+      showCloudMessage(`拉取目标失败：${goalsError.message}`);
+    }
     return;
   }
 
@@ -716,8 +738,41 @@ async function syncCloudToLocal() {
 
   writeSyncMeta({ lastSyncedAt: new Date().toISOString() });
   renderAll();
-  updateCloudStatus();
-  showCloudMessage("云端数据已同步到当前浏览器。");
+  if (!silent) {
+    showCloudMessage("已从云端更新到当前设备。");
+  }
+}
+
+async function maybeRequestMagicLink() {
+  const client = supabaseClient || createSupabaseClient();
+  const config = getCloudConfig();
+  const meta = getMagicLinkMeta();
+  if (!client || !config.email) {
+    return;
+  }
+
+  const lastRequested = meta.requestedAt ? new Date(meta.requestedAt).getTime() : 0;
+  const now = Date.now();
+  if (lastRequested && now - lastRequested < 10 * 60 * 1000) {
+    showCloudMessage("已向你的邮箱发送登录链接，完成一次授权后会自动开始云同步。");
+    return;
+  }
+
+  const redirectTo = `${window.location.origin}${window.location.pathname}`;
+  const { error } = await client.auth.signInWithOtp({
+    email: config.email,
+    options: {
+      emailRedirectTo: redirectTo,
+    },
+  });
+
+  if (error) {
+    showCloudMessage(`云端登录初始化失败：${error.message}`);
+    return;
+  }
+
+  writeMagicLinkMeta({ requestedAt: new Date().toISOString() });
+  showCloudMessage(`已向 ${config.email} 发送一次登录链接，完成后页面会自动读写 Supabase。`);
 }
 
 async function maybeAutoSyncRecord(record) {
@@ -732,6 +787,7 @@ async function maybeAutoSyncRecord(record) {
 
   writeSyncMeta({ lastSyncedAt: new Date().toISOString() });
   updateCloudStatus();
+  showCloudMessage("当前记录已自动保存到云端。");
 }
 
 async function maybeAutoSyncGoals(goals) {
@@ -743,6 +799,7 @@ async function maybeAutoSyncGoals(goals) {
   await client.from("health_goals").upsert({ user_id: cloudSession.user.id, ...goals }, { onConflict: "user_id" });
   writeSyncMeta({ lastSyncedAt: new Date().toISOString() });
   updateCloudStatus();
+  showCloudMessage("目标已自动同步到云端。");
 }
 
 function upsertRecord(newRecord) {
@@ -764,7 +821,6 @@ function resetFormForNextEntry() {
 
 function renderAll() {
   fillGoalsForm();
-  fillCloudForm();
   renderRecords();
   renderSummary();
   renderReview();
@@ -805,65 +861,6 @@ goalsForm.addEventListener("submit", async (event) => {
   writeGoals(nextGoals);
   await maybeAutoSyncGoals(nextGoals);
   renderAll();
-});
-
-cloudConfigForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  writeCloudConfig({
-    url: supabaseUrlInput.value.trim(),
-    anonKey: supabaseAnonKeyInput.value.trim(),
-    email: authEmailInput.value.trim(),
-  });
-  createSupabaseClient();
-  await restoreCloudSession();
-  renderAll();
-  showCloudMessage("云配置已保存。接下来可以发送 Magic Link 登录。");
-});
-
-sendMagicLinkBtn.addEventListener("click", async () => {
-  const client = supabaseClient || createSupabaseClient();
-  const email = authEmailInput.value.trim();
-
-  if (!client || !email) {
-    showCloudMessage("请先填写并保存 Supabase 配置和登录邮箱。");
-    return;
-  }
-
-  const redirectTo = `${window.location.origin}${window.location.pathname}`;
-  const { error } = await client.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: redirectTo,
-    },
-  });
-
-  if (error) {
-    showCloudMessage(`发送登录链接失败：${error.message}`);
-    return;
-  }
-
-  showCloudMessage("Magic Link 已发送，请去邮箱中点击登录链接后回到当前页面。");
-});
-
-syncUpBtn.addEventListener("click", async () => {
-  await syncLocalToCloud();
-});
-
-syncDownBtn.addEventListener("click", async () => {
-  await syncCloudToLocal();
-});
-
-signOutBtn.addEventListener("click", async () => {
-  const client = supabaseClient || createSupabaseClient();
-  if (!client) {
-    showCloudMessage("当前还没有启用云同步。");
-    return;
-  }
-
-  await client.auth.signOut();
-  cloudSession = null;
-  updateCloudStatus();
-  showCloudMessage("已退出云端账户。");
 });
 
 periodButtons.forEach((button) => {
@@ -929,6 +926,7 @@ clearBtn.addEventListener("click", () => {
   }
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(GOALS_KEY);
+  localStorage.removeItem(MAGIC_LINK_META_KEY);
   fillGoalsForm();
   resetFormForNextEntry();
   renderAll();
@@ -938,7 +936,6 @@ clearBtn.addEventListener("click", () => {
 
 setToday();
 fillGoalsForm();
-fillCloudForm();
 createSupabaseClient();
 restoreCloudSession();
 renderAll();

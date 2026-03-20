@@ -152,8 +152,7 @@ th,
 .review-grid article,
 .insight-item,
 .trend-button,
-.period-button,
-.cloud-status article {
+.period-button {
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.72);
   border: 1px solid var(--line);
@@ -161,15 +160,13 @@ th,
 
 .hero-highlights div,
 .summary-grid article,
-.review-grid article,
-.cloud-status article {
+.review-grid article {
   padding: 16px;
 }
 
 .hero-highlights span,
 .summary-grid span,
 .review-grid span,
-.cloud-status span,
 .insight-title {
   display: block;
   color: var(--muted);
@@ -179,9 +176,32 @@ th,
 
 .hero-highlights strong,
 .summary-grid strong,
-.review-grid strong,
-.cloud-status strong {
+.review-grid strong {
   font-size: 1.28rem;
+}
+
+.sync-inline {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.sync-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sync-pill {
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.sync-message {
+  margin: 10px 0 0;
+  min-height: 1.4em;
+  font-size: 0.92rem;
 }
 
 .dashboard {
@@ -220,14 +240,12 @@ th,
 
 .panel-records,
 .panel-trend,
-.panel-review,
-.panel-cloud {
+.panel-review {
   grid-column: 1 / -1;
 }
 
 .health-form,
-.goals-form,
-.cloud-form {
+.goals-form {
   display: grid;
   gap: 16px;
 }
@@ -314,8 +332,7 @@ button[type="submit"] {
 }
 
 .period-controls,
-.trend-controls,
-.cloud-actions {
+.trend-controls {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
@@ -337,10 +354,7 @@ button[type="submit"] {
 }
 
 .review-grid + .review-grid,
-.review-notes,
-.cloud-form,
-.setup-callout,
-.cloud-message {
+.review-notes {
   margin-top: 16px;
 }
 
@@ -417,27 +431,6 @@ button[type="submit"] {
   background: rgba(255, 255, 255, 0.55);
 }
 
-.setup-callout {
-  padding: 14px 16px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px dashed var(--line);
-}
-
-.setup-callout p {
-  margin: 0 0 8px;
-}
-
-.text-link {
-  color: var(--primary);
-  text-decoration: none;
-  font-weight: 600;
-}
-
-.text-link:hover {
-  text-decoration: underline;
-}
-
 .records-toolbar {
   display: flex;
   gap: 12px;
@@ -508,8 +501,7 @@ tbody tr:last-child td {
   .panel-form,
   .panel-records,
   .panel-trend,
-  .panel-review,
-  .panel-cloud {
+  .panel-review {
     grid-row: auto;
     grid-column: auto;
   }
@@ -530,8 +522,7 @@ tbody tr:last-child td {
 
   .hero-highlights,
   .summary-grid,
-  .review-grid,
-  .cloud-status {
+  .review-grid {
     grid-template-columns: 1fr;
   }
 
@@ -540,8 +531,7 @@ tbody tr:last-child td {
   }
 
   .period-controls,
-  .trend-controls,
-  .cloud-actions {
+  .trend-controls {
     gap: 8px;
   }
 

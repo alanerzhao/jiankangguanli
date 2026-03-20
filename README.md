@@ -8,7 +8,7 @@
 - 自定义健康目标
 - 自动生成最近一周摘要、趋势图和简单健康提示
 - 支持 `7天 / 30天 / 本月 / 今年` 的复盘视角
-- 预留 Supabase 云同步能力，适合后续多设备使用
+- 预留 Supabase 云同步能力，默认不在主界面暴露配置面板
 - 使用浏览器 `localStorage` 本地保存数据
 - 支持导出和导入 JSON 数据
 
@@ -25,11 +25,11 @@
 
 1. 创建一个 Supabase 项目
 2. 打开 SQL Editor，运行仓库里的 `supabase-setup.sql`
-3. 把 Project URL 和 Anon Key 填到页面的“云同步（Supabase）”面板
-4. 用邮箱接收 Magic Link 登录
-5. 点击“上传到云端”或“从云端拉取”
+3. 在 `config.js` 里填写 `supabaseUrl`、`supabaseAnonKey` 和 `supabaseAuthEmail`
+4. 打开页面后，系统会自动向 `supabaseAuthEmail` 发送一次登录链接
+5. 完成首次授权后，后续记录会自动写入 Supabase，页面加载时也会自动拉取云端数据
 
-这个方案适合继续保留 GitHub Pages 静态前端，同时让数据支持长期管理和多设备同步。
+这个方案适合继续保留 GitHub Pages 静态前端，同时让数据支持长期管理和多设备同步。Supabase 作为底层基础设施存在，不再作为完整业务模块展示在页面上。
 
 ## 发布到 GitHub Pages
 
@@ -46,6 +46,7 @@
 ## 文件说明
 
 - `index.html`: 页面结构
+- `config.js`: Supabase 运行时配置
 - `styles.css`: 界面样式
 - `app.js`: 数据存储与交互逻辑
 - `supabase-setup.sql`: Supabase 数据表和 RLS 初始化 SQL
