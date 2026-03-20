@@ -19,7 +19,7 @@
           <p class="eyebrow">Personal Health Manager</p>
           <h1>健康掌舵台</h1>
           <p class="hero-text">
-            把饮水、睡眠、步数、体重、心情和血压集中管理。所有数据只保存在当前浏览器，适合日常自我健康追踪。
+            把饮水、睡眠、步数、饮食热量、体重和心情集中管理。所有数据只保存在当前浏览器，适合日常自我健康追踪。
           </p>
         </div>
         <div class="hero-card">
@@ -34,8 +34,8 @@
               <strong id="latestWeight">-</strong>
             </div>
             <div>
-              <span>最近血压</span>
-              <strong id="latestBloodPressure">-</strong>
+              <span>最近热量</span>
+              <strong id="latestCalories">-</strong>
             </div>
           </div>
         </div>
@@ -65,15 +65,12 @@
               <input type="number" id="steps" min="0" step="100" placeholder="例如 8000" />
             </label>
             <label>
-              体重（kg）
-              <input type="number" id="weight" min="0" step="0.1" placeholder="例如 60.5" />
+              饮食热量（kcal）
+              <input type="number" id="calories" min="0" step="10" placeholder="例如 1650" />
             </label>
             <label>
-              血压（收缩 / 舒张）
-              <div class="inline-group">
-                <input type="number" id="systolic" min="0" step="1" placeholder="收缩压" />
-                <input type="number" id="diastolic" min="0" step="1" placeholder="舒张压" />
-              </div>
+              体重（kg）
+              <input type="number" id="weight" min="0" step="0.1" placeholder="例如 60.5" />
             </label>
             <label>
               心情状态
@@ -86,7 +83,7 @@
             </label>
             <label>
               备注
-              <textarea id="notes" rows="4" placeholder="例如：今天加班、跑步 30 分钟、晚餐偏咸"></textarea>
+              <textarea id="notes" rows="4" placeholder="例如：今天吃得偏多、晚饭后散步、午休不足"></textarea>
             </label>
             <button type="submit">保存今日记录</button>
           </form>
@@ -111,12 +108,12 @@
               <input type="number" id="goalSteps" min="0" step="100" />
             </label>
             <label>
-              目标体重（kg）
-              <input type="number" id="goalWeight" min="0" step="0.1" />
+              热量目标上限（kcal）
+              <input type="number" id="goalCalories" min="0" step="10" />
             </label>
             <label>
-              血压上限（收缩压）
-              <input type="number" id="goalSystolic" min="0" step="1" />
+              目标体重（kg）
+              <input type="number" id="goalWeight" min="0" step="0.1" />
             </label>
             <button type="submit">更新目标</button>
           </form>
@@ -141,11 +138,29 @@
               <strong id="avgSteps">-</strong>
             </article>
             <article>
-              <span>心情趋势</span>
-              <strong id="moodTrend">-</strong>
+              <span>平均热量</span>
+              <strong id="avgCalories">-</strong>
             </article>
           </div>
           <div id="insights" class="insights"></div>
+        </section>
+
+        <section class="panel panel-trend">
+          <div class="panel-heading panel-heading-split">
+            <div>
+              <h2>趋势图</h2>
+              <p id="chartSummary">最近 7 天热量</p>
+            </div>
+            <p id="chartCaption" class="chart-caption">切换指标查看近期变化</p>
+          </div>
+          <div class="trend-controls">
+            <button type="button" class="trend-button" data-metric="water">饮水</button>
+            <button type="button" class="trend-button" data-metric="sleep">睡眠</button>
+            <button type="button" class="trend-button" data-metric="steps">步数</button>
+            <button type="button" class="trend-button is-active" data-metric="calories">热量</button>
+            <button type="button" class="trend-button" data-metric="weight">体重</button>
+          </div>
+          <div id="trendChart" class="trend-chart"></div>
         </section>
 
         <section class="panel panel-records">
@@ -169,8 +184,8 @@
                   <th>饮水</th>
                   <th>睡眠</th>
                   <th>步数</th>
+                  <th>热量</th>
                   <th>体重</th>
-                  <th>血压</th>
                   <th>心情</th>
                   <th>备注</th>
                 </tr>
