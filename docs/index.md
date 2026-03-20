@@ -16,6 +16,8 @@
   跟踪还未解决但已知的重要缺口。
 - `harness-engineering-practice.md`
   记录这次从回滚、补文档、接检查到加入 Playwright 的完整实践。
+- `harness-engineering-article.md`
+  一篇面向他人的说明文章，解释什么是 harness engineering，以及它和 spec coding 的关系。
 
 ## 推荐阅读顺序
 
