@@ -1,10 +1,14 @@
 {
   "name": "health-manager-static",
   "private": true,
+  "devDependencies": {
+    "@playwright/test": "^1.54.2"
+  },
   "scripts": {
-    "check": "npm run check:syntax && npm run check:docs && npm run check:smoke",
+    "check": "npm run check:syntax && npm run check:docs && npm run check:smoke && npm run test:e2e",
     "check:syntax": "node --check app.js && node --check config.js && node --check scripts/check-docs.mjs && node --check scripts/check-static-site.mjs",
     "check:docs": "node scripts/check-docs.mjs",
-    "check:smoke": "node scripts/check-static-site.mjs"
+    "check:smoke": "node scripts/check-static-site.mjs",
+    "test:e2e": "playwright test"
   }
 }

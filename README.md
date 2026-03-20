@@ -66,5 +66,7 @@
 本地执行：
 
 ```bash
+npm install
+npx playwright install chromium
 npm run check
 ```

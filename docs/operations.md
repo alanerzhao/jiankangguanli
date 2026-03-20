@@ -21,6 +21,14 @@ npm run check
 - JavaScript 语法检查
 - 文档完整性检查
 - 静态站点冒烟检查
+- Playwright 端到端测试
+
+首次在本地运行 Playwright 前，需要先安装依赖和浏览器：
+
+```bash
+npm install
+npx playwright install chromium
+```
 
 ## Supabase 初始化
 
