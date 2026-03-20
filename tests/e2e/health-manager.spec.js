@@ -98,3 +98,70 @@ test("can switch review periods and trend metrics", async ({ page }) => {
   await expect(page.locator("#chartCaption")).toContainText("平均");
   await expect(page.locator("#trendChart svg")).toBeVisible();
 });
+
+test("can export and import health data as json", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => {
+    localStorage.setItem(
+      "health-manager-records",
+      JSON.stringify([
+        {
+          date: "2026-03-20",
+          water: 2300,
+          sleep: 8,
+          steps: 9800,
+          calories: 1720,
+          weight: 59.8,
+          mood: "精力充沛",
+          notes: "export target",
+        },
+      ])
+    );
+    localStorage.setItem(
+      "health-manager-goals",
+      JSON.stringify({
+        water: 2100,
+        sleep: 8,
+        steps: 9000,
+        calories: 1750,
+        weight: 60,
+      })
+    );
+  });
+  await page.reload();
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "导出数据" }).click();
+  const download = await downloadPromise;
+  const exported = JSON.parse(await download.createReadStream().then(async (stream) => {
+    let data = "";
+    for await (const chunk of stream) {
+      data += chunk.toString();
+    }
+    return data;
+  }));
+
+  expect(exported.records).toHaveLength(1);
+  expect(exported.records[0].notes).toBe("export target");
+  expect(exported.goals.calories).toBe(1750);
+  expect(exported.cloud).toHaveProperty("configured");
+  expect(exported).toHaveProperty("exportedAt");
+
+  await page.evaluate((keys) => {
+    for (const key of keys) {
+      localStorage.removeItem(key);
+    }
+  }, storageKeys);
+  await page.reload();
+
+  await expect(page.locator("#recordsBody")).toContainText("还没有记录");
+
+  await page.locator("#importInput").setInputFiles({
+    name: "health-data.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(exported, null, 2)),
+  });
+
+  await expect(page.locator("#recordsBody")).toContainText("export target");
+  await expect(page.locator("#monthCaloriesAverage")).toContainText("1720 kcal");
+});
