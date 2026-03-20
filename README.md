@@ -1,0 +1,24 @@
+# 个人健康管理工具
+
+这是一个零依赖的静态网页应用，直接打开 [index.html](/Users/zhaoshuai/Documents/New project 2/index.html) 就能使用。
+
+## 功能
+
+- 记录每日饮水、睡眠、步数、体重、血压、心情和备注
+- 自定义健康目标
+- 自动生成最近一周摘要和简单健康提示
+- 使用浏览器 `localStorage` 本地保存数据
+- 支持导出和导入 JSON 数据
+
+## 使用方式
+
+1. 打开 [index.html](/Users/zhaoshuai/Documents/New project 2/index.html)
+2. 在“目标设置”里调整自己的健康目标
+3. 每天在“每日打卡”里填写数据并保存
+4. 在“健康记录”里查看最近记录，或导出备份
+
+## 文件说明
+
+- [index.html](/Users/zhaoshuai/Documents/New project 2/index.html): 页面结构
+- [styles.css](/Users/zhaoshuai/Documents/New project 2/styles.css): 界面样式
+- [app.js](/Users/zhaoshuai/Documents/New project 2/app.js): 数据存储与交互逻辑

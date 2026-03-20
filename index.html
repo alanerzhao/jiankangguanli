@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>健康掌舵台</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700&family=Outfit:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Personal Health Manager</p>
+          <h1>健康掌舵台</h1>
+          <p class="hero-text">
+            把饮水、睡眠、步数、体重、心情和血压集中管理。所有数据只保存在当前浏览器，适合日常自我健康追踪。
+          </p>
+        </div>
+        <div class="hero-card">
+          <p class="hero-card-label">今日完成度</p>
+          <div class="hero-progress">
+            <div id="dailyProgressBar"></div>
+          </div>
+          <p id="dailyProgressText" class="hero-progress-text">0 / 5 项达标</p>
+          <div class="hero-highlights">
+            <div>
+              <span>最近体重</span>
+              <strong id="latestWeight">-</strong>
+            </div>
+            <div>
+              <span>最近血压</span>
+              <strong id="latestBloodPressure">-</strong>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="dashboard">
+        <section class="panel panel-form">
+          <div class="panel-heading">
+            <h2>每日打卡</h2>
+            <p>记录你今天的关键健康数据</p>
+          </div>
+          <form id="healthForm" class="health-form">
+            <label>
+              日期
+              <input type="date" id="recordDate" required />
+            </label>
+            <label>
+              饮水量（ml）
+              <input type="number" id="water" min="0" step="100" placeholder="例如 2000" />
+            </label>
+            <label>
+              睡眠时长（小时）
+              <input type="number" id="sleep" min="0" max="24" step="0.5" placeholder="例如 7.5" />
+            </label>
+            <label>
+              步数
+              <input type="number" id="steps" min="0" step="100" placeholder="例如 8000" />
+            </label>
+            <label>
+              体重（kg）
+              <input type="number" id="weight" min="0" step="0.1" placeholder="例如 60.5" />
+            </label>
+            <label>
+              血压（收缩 / 舒张）
+              <div class="inline-group">
+                <input type="number" id="systolic" min="0" step="1" placeholder="收缩压" />
+                <input type="number" id="diastolic" min="0" step="1" placeholder="舒张压" />
+              </div>
+            </label>
+            <label>
+              心情状态
+              <select id="mood">
+                <option value="精力充沛">精力充沛</option>
+                <option value="状态稳定">状态稳定</option>
+                <option value="有点疲惫">有点疲惫</option>
+                <option value="压力较大">压力较大</option>
+              </select>
+            </label>
+            <label>
+              备注
+              <textarea id="notes" rows="4" placeholder="例如：今天加班、跑步 30 分钟、晚餐偏咸"></textarea>
+            </label>
+            <button type="submit">保存今日记录</button>
+          </form>
+        </section>
+
+        <section class="panel panel-goals">
+          <div class="panel-heading">
+            <h2>目标设置</h2>
+            <p>用自己的节奏管理达标线</p>
+          </div>
+          <form id="goalsForm" class="goals-form">
+            <label>
+              饮水目标（ml）
+              <input type="number" id="goalWater" min="0" step="100" />
+            </label>
+            <label>
+              睡眠目标（小时）
+              <input type="number" id="goalSleep" min="0" max="24" step="0.5" />
+            </label>
+            <label>
+              步数目标
+              <input type="number" id="goalSteps" min="0" step="100" />
+            </label>
+            <label>
+              目标体重（kg）
+              <input type="number" id="goalWeight" min="0" step="0.1" />
+            </label>
+            <label>
+              血压上限（收缩压）
+              <input type="number" id="goalSystolic" min="0" step="1" />
+            </label>
+            <button type="submit">更新目标</button>
+          </form>
+        </section>
+
+        <section class="panel panel-summary">
+          <div class="panel-heading">
+            <h2>一周摘要</h2>
+            <p>快速看看近期状态</p>
+          </div>
+          <div class="summary-grid">
+            <article>
+              <span>平均饮水</span>
+              <strong id="avgWater">-</strong>
+            </article>
+            <article>
+              <span>平均睡眠</span>
+              <strong id="avgSleep">-</strong>
+            </article>
+            <article>
+              <span>平均步数</span>
+              <strong id="avgSteps">-</strong>
+            </article>
+            <article>
+              <span>心情趋势</span>
+              <strong id="moodTrend">-</strong>
+            </article>
+          </div>
+          <div id="insights" class="insights"></div>
+        </section>
+
+        <section class="panel panel-records">
+          <div class="panel-heading">
+            <h2>健康记录</h2>
+            <p>最近 10 条记录</p>
+          </div>
+          <div class="records-toolbar">
+            <button id="exportBtn" type="button" class="secondary-button">导出数据</button>
+            <label class="import-label">
+              导入数据
+              <input id="importInput" type="file" accept="application/json" />
+            </label>
+            <button id="clearBtn" type="button" class="ghost-button">清空记录</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>日期</th>
+                  <th>饮水</th>
+                  <th>睡眠</th>
+                  <th>步数</th>
+                  <th>体重</th>
+                  <th>血压</th>
+                  <th>心情</th>
+                  <th>备注</th>
+                </tr>
+              </thead>
+              <tbody id="recordsBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <template id="insightTemplate">
+      <div class="insight-item">
+        <span class="insight-title"></span>
+        <p class="insight-body"></p>
+      </div>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
