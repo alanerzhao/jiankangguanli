@@ -2,6 +2,30 @@ const { test, expect } = require("@playwright/test");
 
 const storageKeys = ["health-manager-records", "health-manager-goals", "health-manager-sync-meta", "health-manager-magic-link-meta"];
 
+function toDateInputValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getCurrentMonthFixtureDates() {
+  const now = new Date();
+  const today = now.getDate();
+  const days = [Math.max(1, today - 6), Math.max(1, today - 3), today];
+
+  return days.map((day) => toDateInputValue(new Date(now.getFullYear(), now.getMonth(), day)));
+}
+
+function countDatesWithinLastDays(dateValues, days) {
+  const today = new Date();
+  const cutoff = new Date(today);
+  cutoff.setDate(cutoff.getDate() - (days - 1));
+  const cutoffValue = toDateInputValue(cutoff);
+
+  return dateValues.filter((value) => value >= cutoffValue).length;
+}
+
 test("can save a daily record and keep it after reload", async ({ page }) => {
   await page.goto("/");
   await page.evaluate((keys) => {
@@ -33,15 +57,18 @@ test("can save a daily record and keep it after reload", async ({ page }) => {
 });
 
 test("can switch review periods and trend metrics", async ({ page }) => {
+  const [firstDate, secondDate, thirdDate] = getCurrentMonthFixtureDates();
+  const recentRecordedDays = countDatesWithinLastDays([firstDate, secondDate, thirdDate], 7);
+
   await page.goto("/");
-  await page.evaluate(() => {
+  await page.evaluate(({ firstDateValue, secondDateValue, thirdDateValue }) => {
     localStorage.removeItem("health-manager-sync-meta");
     localStorage.removeItem("health-manager-magic-link-meta");
     localStorage.setItem(
       "health-manager-records",
       JSON.stringify([
         {
-          date: "2026-03-14",
+          date: firstDateValue,
           water: 1800,
           sleep: 7,
           steps: 7600,
@@ -51,7 +78,7 @@ test("can switch review periods and trend metrics", async ({ page }) => {
           notes: "first",
         },
         {
-          date: "2026-03-18",
+          date: secondDateValue,
           water: 2200,
           sleep: 8,
           steps: 9100,
@@ -61,7 +88,7 @@ test("can switch review periods and trend metrics", async ({ page }) => {
           notes: "second",
         },
         {
-          date: "2026-03-20",
+          date: thirdDateValue,
           water: 2000,
           sleep: 7.5,
           steps: 8400,
@@ -82,11 +109,11 @@ test("can switch review periods and trend metrics", async ({ page }) => {
         weight: 60,
       })
     );
-  });
+  }, { firstDateValue: firstDate, secondDateValue: secondDate, thirdDateValue: thirdDate });
 
   await page.reload();
 
-  await expect(page.locator("#reviewRecordedDays")).toHaveText("3 天");
+  await expect(page.locator("#reviewRecordedDays")).toHaveText(`${recentRecordedDays} 天`);
   await page.getByRole("button", { name: "30 天" }).click();
   await expect(page.locator("#chartSummary")).toContainText("最近 30 天热量");
 
@@ -100,13 +127,15 @@ test("can switch review periods and trend metrics", async ({ page }) => {
 });
 
 test("can export and import health data as json", async ({ page }) => {
+  const today = toDateInputValue(new Date());
+
   await page.goto("/");
-  await page.evaluate(() => {
+  await page.evaluate((currentDate) => {
     localStorage.setItem(
       "health-manager-records",
       JSON.stringify([
         {
-          date: "2026-03-20",
+          date: currentDate,
           water: 2300,
           sleep: 8,
           steps: 9800,
@@ -127,7 +156,7 @@ test("can export and import health data as json", async ({ page }) => {
         weight: 60,
       })
     );
-  });
+  }, today);
   await page.reload();
 
   const downloadPromise = page.waitForEvent("download");
