@@ -110,6 +110,10 @@ function getGoals() {
   return { ...defaultGoals, ...readStorage(GOALS_KEY, {}) };
 }
 
+function getStoredGoals() {
+  return readStorage(GOALS_KEY, {});
+}
+
 function writeGoals(goals) {
   writeStorage(GOALS_KEY, goals);
 }
@@ -124,7 +128,7 @@ function getCloudConfig() {
 }
 
 function getSyncMeta() {
-  return readStorage(SYNC_META_KEY, { lastSyncedAt: "" });
+  return readStorage(SYNC_META_KEY, { lastSyncedAt: "", lastLocalChangeAt: "" });
 }
 
 function writeSyncMeta(meta) {
@@ -139,8 +143,15 @@ function writeMagicLinkMeta(meta) {
   writeStorage(MAGIC_LINK_META_KEY, meta);
 }
 
+function formatLocalDateValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function setToday() {
-  recordDate.value = new Date().toISOString().slice(0, 10);
+  recordDate.value = formatLocalDateValue(new Date());
 }
 
 function fillGoalsForm() {
@@ -214,6 +225,64 @@ function compareRecordsDesc(a, b) {
   return b.date.localeCompare(a.date);
 }
 
+function sortRecordsAsc(records) {
+  return records.slice().sort(compareRecordsAsc);
+}
+
+function hasStoredLocalData() {
+  return getRecords().length > 0 || Object.keys(getStoredGoals()).length > 0;
+}
+
+function hasUnsyncedLocalChanges(meta = getSyncMeta()) {
+  if (!hasStoredLocalData()) {
+    return false;
+  }
+
+  if (!meta.lastSyncedAt) {
+    return true;
+  }
+
+  if (!meta.lastLocalChangeAt) {
+    return false;
+  }
+
+  return new Date(meta.lastLocalChangeAt).getTime() > new Date(meta.lastSyncedAt).getTime();
+}
+
+function markLocalChange() {
+  const now = new Date().toISOString();
+  writeSyncMeta({ ...getSyncMeta(), lastLocalChangeAt: now });
+  updateCloudStatus();
+}
+
+function markSyncSuccess(timestamp = new Date().toISOString()) {
+  writeSyncMeta({
+    ...getSyncMeta(),
+    lastSyncedAt: timestamp,
+    lastLocalChangeAt: timestamp,
+  });
+  updateCloudStatus();
+}
+
+function mergeRecords(localRecords, cloudRecords) {
+  const merged = new Map();
+  cloudRecords.forEach((record) => {
+    merged.set(record.date, record);
+  });
+  localRecords.forEach((record) => {
+    merged.set(record.date, record);
+  });
+  return sortRecordsAsc(Array.from(merged.values()));
+}
+
+function mergeGoals(localStoredGoals, cloudGoals) {
+  return {
+    ...defaultGoals,
+    ...(cloudGoals || {}),
+    ...localStoredGoals,
+  };
+}
+
 function getMonthBounds(baseDate = new Date()) {
   return {
     year: baseDate.getFullYear(),
@@ -250,7 +319,7 @@ function getRecordsForPeriod(period) {
   const days = periodConfigs[period].days;
   const cutoff = new Date(today);
   cutoff.setDate(cutoff.getDate() - (days - 1));
-  const cutoffString = cutoff.toISOString().slice(0, 10);
+  const cutoffString = formatLocalDateValue(cutoff);
   return records.filter((record) => record.date >= cutoffString);
 }
 
@@ -600,7 +669,7 @@ async function restoreCloudSession() {
   updateCloudStatus();
   if (cloudSession?.user) {
     writeMagicLinkMeta({ requestedAt: "" });
-    await syncCloudToLocal(true);
+    await reconcileCloudState(true);
   } else {
     await maybeRequestMagicLink();
   }
@@ -610,7 +679,7 @@ async function restoreCloudSession() {
     updateCloudStatus();
     if (cloudSession?.user) {
       writeMagicLinkMeta({ requestedAt: "" });
-      await syncCloudToLocal(true);
+      await reconcileCloudState(true);
     }
   });
 }
@@ -630,23 +699,27 @@ function normalizeCloudRecords(records, userId) {
 }
 
 async function syncLocalToCloud(silent = false) {
+  return syncLocalSnapshotToCloud(getRecords(), getGoals(), silent);
+}
+
+async function syncLocalSnapshotToCloud(records, goals, silent = false) {
   const client = supabaseClient || createSupabaseClient();
   if (!client) {
     if (!silent) {
       showCloudMessage("请先在 config.js 中填写 Supabase 配置。");
     }
-    return;
+    return false;
   }
 
   if (!cloudSession?.user) {
     if (!silent) {
       showCloudMessage("正在等待云端身份完成绑定。");
     }
-    return;
+    return false;
   }
 
-  const recordsPayload = normalizeCloudRecords(getRecords(), cloudSession.user.id);
-  const goalsPayload = { user_id: cloudSession.user.id, ...getGoals() };
+  const recordsPayload = normalizeCloudRecords(records, cloudSession.user.id);
+  const goalsPayload = { user_id: cloudSession.user.id, ...goals };
 
   const recordsResult = await client.from("health_records").upsert(recordsPayload, {
     onConflict: "user_id,record_date",
@@ -655,7 +728,7 @@ async function syncLocalToCloud(silent = false) {
     if (!silent) {
       showCloudMessage(`上传记录失败：${recordsResult.error.message}`);
     }
-    return;
+    return false;
   }
 
   const goalsResult = await client.from("health_goals").upsert(goalsPayload, {
@@ -665,14 +738,36 @@ async function syncLocalToCloud(silent = false) {
     if (!silent) {
       showCloudMessage(`上传目标失败：${goalsResult.error.message}`);
     }
-    return;
+    return false;
   }
 
-  writeSyncMeta({ lastSyncedAt: new Date().toISOString() });
-  updateCloudStatus();
+  markSyncSuccess();
   if (!silent) {
     showCloudMessage("数据已自动保存到云端。");
   }
+  return true;
+}
+
+async function fetchCloudState() {
+  if (!cloudSession?.user) {
+    return { recordsData: [], goalsData: null, recordsError: null, goalsError: null };
+  }
+
+  const client = supabaseClient || createSupabaseClient();
+  if (!client) {
+    return { recordsData: [], goalsData: null, recordsError: null, goalsError: null };
+  }
+
+  const [{ data: recordsData, error: recordsError }, { data: goalsData, error: goalsError }] = await Promise.all([
+    client
+      .from("health_records")
+      .select("record_date, water, sleep, steps, calories, weight, mood, notes")
+      .eq("user_id", cloudSession.user.id)
+      .order("record_date", { ascending: true }),
+    client.from("health_goals").select("water, sleep, steps, calories, weight").eq("user_id", cloudSession.user.id).single(),
+  ]);
+
+  return { recordsData, goalsData, recordsError, goalsError };
 }
 
 async function syncCloudToLocal(silent = false) {
@@ -691,14 +786,7 @@ async function syncCloudToLocal(silent = false) {
     return;
   }
 
-  const [{ data: recordsData, error: recordsError }, { data: goalsData, error: goalsError }] = await Promise.all([
-    client
-      .from("health_records")
-      .select("record_date, water, sleep, steps, calories, weight, mood, notes")
-      .eq("user_id", cloudSession.user.id)
-      .order("record_date", { ascending: true }),
-    client.from("health_goals").select("water, sleep, steps, calories, weight").eq("user_id", cloudSession.user.id).single(),
-  ]);
+  const { recordsData, goalsData, recordsError, goalsError } = await fetchCloudState();
 
   if (recordsError) {
     if (!silent) {
@@ -736,11 +824,98 @@ async function syncCloudToLocal(silent = false) {
     });
   }
 
-  writeSyncMeta({ lastSyncedAt: new Date().toISOString() });
+  markSyncSuccess();
   renderAll();
   if (!silent) {
     showCloudMessage("已从云端更新到当前设备。");
   }
+}
+
+async function reconcileCloudState(silent = false) {
+  const client = supabaseClient || createSupabaseClient();
+  if (!client) {
+    if (!silent) {
+      showCloudMessage("请先在 config.js 中填写 Supabase 配置。");
+    }
+    return;
+  }
+
+  if (!cloudSession?.user) {
+    if (!silent) {
+      showCloudMessage("正在等待云端身份完成绑定。");
+    }
+    return;
+  }
+
+  const { recordsData, goalsData, recordsError, goalsError } = await fetchCloudState();
+  if (recordsError) {
+    if (!silent) {
+      showCloudMessage(`拉取记录失败：${recordsError.message}`);
+    }
+    return;
+  }
+
+  if (goalsError && goalsError.code !== "PGRST116") {
+    if (!silent) {
+      showCloudMessage(`拉取目标失败：${goalsError.message}`);
+    }
+    return;
+  }
+
+  const cloudRecords = (recordsData || []).map((record) => ({
+    date: record.record_date,
+    water: record.water,
+    sleep: record.sleep,
+    steps: record.steps,
+    calories: record.calories,
+    weight: record.weight,
+    mood: record.mood,
+    notes: record.notes || "",
+  }));
+  const cloudGoals = goalsData
+    ? {
+        water: goalsData.water,
+        sleep: goalsData.sleep,
+        steps: goalsData.steps,
+        calories: goalsData.calories,
+        weight: goalsData.weight,
+      }
+    : null;
+  const localRecords = sortRecordsAsc(getRecords());
+  const localStoredGoals = getStoredGoals();
+  const localGoals = getGoals();
+  const localHasData = hasStoredLocalData();
+  const cloudHasData = cloudRecords.length > 0 || Boolean(cloudGoals);
+
+  if (!localHasData && cloudHasData) {
+    await syncCloudToLocal(silent);
+    return;
+  }
+
+  if (localHasData && !cloudHasData) {
+    await syncLocalSnapshotToCloud(localRecords, localGoals, silent);
+    return;
+  }
+
+  if (!localHasData && !cloudHasData) {
+    markSyncSuccess();
+    return;
+  }
+
+  if (hasUnsyncedLocalChanges()) {
+    const mergedRecords = mergeRecords(localRecords, cloudRecords);
+    const mergedGoals = mergeGoals(localStoredGoals, cloudGoals);
+    writeRecords(mergedRecords);
+    writeGoals(mergedGoals);
+    renderAll();
+    const synced = await syncLocalSnapshotToCloud(mergedRecords, mergedGoals, silent);
+    if (synced && !silent) {
+      showCloudMessage("检测到本地未同步数据，已优先保留本地并合并云端。");
+    }
+    return;
+  }
+
+  await syncCloudToLocal(silent);
 }
 
 async function maybeRequestMagicLink() {
@@ -781,12 +956,15 @@ async function maybeAutoSyncRecord(record) {
     return;
   }
 
-  await client.from("health_records").upsert(normalizeCloudRecords([record], cloudSession.user.id), {
+  const result = await client.from("health_records").upsert(normalizeCloudRecords([record], cloudSession.user.id), {
     onConflict: "user_id,record_date",
   });
+  if (result.error) {
+    showCloudMessage(`本地已保存，但云端同步失败：${result.error.message}`);
+    return;
+  }
 
-  writeSyncMeta({ lastSyncedAt: new Date().toISOString() });
-  updateCloudStatus();
+  markSyncSuccess();
   showCloudMessage("当前记录已自动保存到云端。");
 }
 
@@ -796,9 +974,15 @@ async function maybeAutoSyncGoals(goals) {
     return;
   }
 
-  await client.from("health_goals").upsert({ user_id: cloudSession.user.id, ...goals }, { onConflict: "user_id" });
-  writeSyncMeta({ lastSyncedAt: new Date().toISOString() });
-  updateCloudStatus();
+  const result = await client
+    .from("health_goals")
+    .upsert({ user_id: cloudSession.user.id, ...goals }, { onConflict: "user_id" });
+  if (result.error) {
+    showCloudMessage(`本地目标已保存，但云端同步失败：${result.error.message}`);
+    return;
+  }
+
+  markSyncSuccess();
   showCloudMessage("目标已自动同步到云端。");
 }
 
@@ -843,6 +1027,7 @@ form.addEventListener("submit", async (event) => {
   };
 
   upsertRecord(record);
+  markLocalChange();
   await maybeAutoSyncRecord(record);
   renderAll();
   resetFormForNextEntry();
@@ -859,6 +1044,7 @@ goalsForm.addEventListener("submit", async (event) => {
     weight: Number(goalWeight.value) || defaultGoals.weight,
   };
   writeGoals(nextGoals);
+  markLocalChange();
   await maybeAutoSyncGoals(nextGoals);
   renderAll();
 });
@@ -892,7 +1078,7 @@ exportBtn.addEventListener("click", () => {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `health-manager-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = `health-manager-${formatLocalDateValue(new Date())}.json`;
   link.click();
   URL.revokeObjectURL(url);
 });
@@ -909,11 +1095,13 @@ importInput.addEventListener("change", async (event) => {
     if (!Array.isArray(parsed.records) || !parsed.goals || typeof parsed.goals !== "object") {
       throw new Error("invalid-data");
     }
-    writeRecords(parsed.records);
+    writeRecords(sortRecordsAsc(parsed.records));
     writeGoals(parsed.goals);
+    markLocalChange();
+    const synced = await syncLocalToCloud(true);
     renderAll();
     importInput.value = "";
-    showCloudMessage("本地导入成功。");
+    showCloudMessage(synced === false && cloudSession?.user ? "本地导入成功，云端同步暂未完成。" : "本地导入成功。");
   } catch {
     alert("导入失败，请确认 JSON 文件格式正确。");
   }
