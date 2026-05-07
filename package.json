@@ -9,6 +9,6 @@
     "check:syntax": "node --check app.js && node --check config.js && node --check scripts/check-docs.mjs && node --check scripts/check-static-site.mjs",
     "check:docs": "node scripts/check-docs.mjs",
     "check:smoke": "node scripts/check-static-site.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "node ./node_modules/@playwright/test/cli.js test"
   }
 }
